@@ -10,13 +10,24 @@ import json
 import pandas as pd
 import datetime
 
+# --- Page Configuration (MUST BE FIRST) ---
+st.set_page_config(
+    page_title="🌿 AI Plant Health Assistant",
+    page_icon="🌿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # --- Safe OpenCV Import ---
 try:
     import cv2
     CV2_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError) as e:
     CV2_AVAILABLE = False
-    st.warning("OpenCV not available - blur detection disabled", icon="⚠️")
+    if "_ARRAY_API" in str(e):
+        st.warning("OpenCV compatibility issue detected - blur detection disabled", icon="⚠️")
+    else:
+        st.warning("OpenCV not available - blur detection disabled", icon="⚠️")
 
 # --- Constants ---
 PLANT_VILLAGE_CLASSES = [
@@ -27,14 +38,6 @@ PLANT_VILLAGE_CLASSES = [
     "Corn_(maize)___Northern_Leaf_Blight", "Corn_(maize)___healthy",
     # ... (keep your existing class list)
 ]
-
-# --- Page Configuration ---
-st.set_page_config(
-    page_title="🌿 AI Plant Health Assistant",
-    page_icon="🌿",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # --- Title Section ---
 st.title("🌿 AI Plant Health Assistant")
@@ -118,7 +121,57 @@ def get_weather_data(city, api_key):
     except Exception:
         return {"data": None, "error": "Weather service unavailable"}
 
-# ... (keep your existing get_plant_identification and get_issue_details functions)
+def get_plant_identification(image_bytes, filename):
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        prompt = f"""Analyze this plant image and identify the most likely issue:
+        1. Disease? Use PlantVillage format (e.g., 'Tomato___Late_blight')
+        2. Pest? Name it (e.g., 'Aphids')
+        3. Weed? Name it (e.g., 'Dandelion')
+        4. If healthy, state 'Healthy Plant'
+        5. If unknown, state 'Unknown/Not Plant'
+        
+        Return ONLY the identification name. No explanations.
+        """
+        response = vision_model.generate_content([prompt, img])
+        response.resolve()
+        return {
+            "identified_issue": response.text.strip(),
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "identified_issue": "Error",
+            "error": str(e)
+        }
+
+def get_issue_details(issue_name):
+    if not issue_name or issue_name in ["Unknown/Not Plant", "Error", "Healthy Plant"]:
+        return {"details": "No details available for this classification.", "error": None}
+
+    try:
+        prompt = f"""Provide detailed information about: "{issue_name}".
+        Include:
+        1. **Type** (Disease/Pest/Weed)
+        2. **Symptoms**
+        3. **Causes**
+        4. **Affected Plants**
+        5. **Treatment Options**
+        6. **Prevention Tips**
+        
+        Use Markdown formatting with bullet points.
+        """
+        response = text_model.generate_content(prompt)
+        response.resolve()
+        return {
+            "details": response.text,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "details": "Error retrieving details.",
+            "error": str(e)
+        }
 
 # --- Session State ---
 if 'analysis_results' not in st.session_state:
