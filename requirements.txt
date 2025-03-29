@@ -6,3 +6,4 @@ pandas
 Pillow
 numpy
 streamlit-extras
+opencv-python-headless==4.9.0.80
